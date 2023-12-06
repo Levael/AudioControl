@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34009.444
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AudioControl", "AudioControl\AudioControl.csproj", "{83BC7B1A-D45E-4433-AA94-4A2DCBCC0746}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{83BC7B1A-D45E-4433-AA94-4A2DCBCC0746}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{83BC7B1A-D45E-4433-AA94-4A2DCBCC0746}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{83BC7B1A-D45E-4433-AA94-4A2DCBCC0746}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{83BC7B1A-D45E-4433-AA94-4A2DCBCC0746}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C47C97C5-4F0F-410B-81FA-3C78849F8B65}
+	EndGlobalSection
+EndGlobal
