@@ -1,6 +1,6 @@
-﻿// dotnet publish -c Release    -- for compilation (insert into "developer command prompt")
+﻿// dotnet publish -c Release -r win-x64 --self-contained           for compilation into single .exe file
 // c# version must be 10
-// .net must be core
+// .net must be .net7
 
 using System;
 using System.Diagnostics;
