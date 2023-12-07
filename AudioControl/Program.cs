@@ -1,9 +1,14 @@
-﻿using System;
+﻿// dotnet publish -c Release    -- for compilation (insert into "developer command prompt")
+// c# version must be 10
+// .net must be core
+
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
+using NAudio.CoreAudioApi;
 
 class NamedPipeServer
 {
@@ -12,12 +17,15 @@ class NamedPipeServer
     private StreamReader streamReader;
     private StreamWriter streamWriter;
     private CancellationTokenSource cts = new CancellationTokenSource();
+    private AudioCommandProcessor resultProcessor;
 
     public NamedPipeServer()
     {
         pipeServer = new NamedPipeServerStream(PipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
         streamReader = new StreamReader(pipeServer);
         streamWriter = new StreamWriter(pipeServer);
+
+        resultProcessor = new();
     }
 
     public async Task StartAsync(int parentProcessId)
@@ -68,8 +76,7 @@ class NamedPipeServer
 
     private string ProcessMessage(string message)
     {
-        // Здесь ваша логика обработки сообщения
-        return $"Обработано: {message}";
+        return resultProcessor.ProcessCommand(message);
     }
 
     public void Dispose()
@@ -96,15 +103,70 @@ class Program
             return;
         }
 
-
+        var resultProcessor = new AudioCommandProcessor();
         var server = new NamedPipeServer();
         await server.StartAsync(parentProcessId);
 
-        Console.WriteLine("Нажмите любую клавишу для выхода...");
-        Console.ReadKey();
+        /*var debugThread = new Thread(() =>
+        {
+            while (true)
+            {
+                Console.Beep(800, 100);
+                Thread.Sleep(250);
+            }
+        });
+        debugThread.Start();*/
+    }
+}
 
-        server.Stop();
-        server.Dispose();
+
+class AudioCommandProcessor
+{
+    private MMDeviceEnumerator enumerator = new MMDeviceEnumerator();
+
+
+    public string ProcessCommand(string command)
+    {
+        switch (command)
+        {
+            case "GetAudioDevices":
+                return GetAudioDevices();
+            case "StartStreaming":
+                return StartStreaming();
+            case "StopStreaming":
+                return StopStreaming();
+            case "PlayAudioFile":
+                return PlayAudioFile();
+            default:
+                return "Unknown Command";
+        }
+    }
+
+    private string GetAudioDevices()
+    {
+        string response = "";
+
+        foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active))
+        {
+            response += $"Device: {device.FriendlyName}\n";
+        }
+
+        return response;
+    }
+
+    private string StartStreaming()
+    {
+        return "Streaming Started";
+    }
+
+    private string StopStreaming()
+    {
+        return "Streaming Stopped";
+    }
+
+    private string PlayAudioFile()
+    {
+        return "Audio File Playing";
     }
 }
 
@@ -150,7 +212,7 @@ class AudioControlApp
         debugThread.Start();
 
 
-        var processor = new AudioCommandProcessor();
+        var resultProcessor = new AudioCommandProcessor();
         var pipeServer = new NamedPipeServerStream("AudioPipe", PipeDirection.InOut);
         pipeServer.WaitForConnection();
 
@@ -169,7 +231,7 @@ class AudioControlApp
                     string command = await streamReader.ReadLineAsync();
                     if (command != null)
                     {
-                        var response = processor.ProcessCommand(command);
+                        var response = resultProcessor.ProcessCommand(command);
 
                         *//*streamWriter.WriteLine($"Response from server: {response}");
                         streamWriter.Flush();*//*
