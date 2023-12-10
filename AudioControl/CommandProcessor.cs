@@ -12,12 +12,12 @@ namespace AudioControl
         private MMDeviceCollection outputDevices;
         private bool isIntercomOn = false;
 
+        private WasapiCapture audioInput;
+        private WasapiOut audioOutput;
+
         public AudioCommandProcessor()
         {
             enumerator = new();
-
-            /*inputDevices = new();
-            outputDevices = new();*/
 
             UpdateAudioDevices();
             audioDevicesJsonAnswer = GetAudioDevices();
@@ -38,7 +38,7 @@ namespace AudioControl
                     return StartMic2SpeakerStreaming(jsonElement.GetProperty("MicrophoneIndex").GetInt32(), jsonElement.GetProperty("SpeakerIndex").GetInt32());
 
                 case "StopIntercomStream":
-                    return $"Intercom stream stopped";
+                    return StopMic2SpeakerStreaming();
 
                 case "PlayAudioFile":
                     return $"Played: {jsonElement.GetProperty("FileName").GetString()}";
@@ -81,8 +81,8 @@ namespace AudioControl
                 MMDevice inputDevice = inputDevices[inputDeviceIndex];
                 MMDevice outputDevice = outputDevices[outputDeviceIndex];
 
-                var audioInput = new WasapiCapture(inputDevice);
-                var audioOutput = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 10);
+                audioInput = new WasapiCapture(inputDevice);
+                audioOutput = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 10);
                 // number here is size of buffer in ms (less -- faster, but more chance of artifacts)
 
                 var buffer = new BufferedWaveProvider(audioInput.WaveFormat);
@@ -121,7 +121,27 @@ namespace AudioControl
 
         private string StopMic2SpeakerStreaming()
         {
-            return "Streaming Stopped";
+            if (audioInput != null && audioOutput != null && isIntercomOn)
+            {
+                audioInput.StopRecording();
+                audioOutput.Stop();
+
+                audioInput.Dispose();
+                audioOutput.Dispose();
+
+                audioInput = null;
+                audioOutput = null;
+
+                isIntercomOn = false;
+            }
+
+            var responseInfo = new
+            {
+                Command = "StopIntercomStream"
+            };
+
+            string json = JsonSerializer.Serialize(responseInfo);
+            return json;
         }
 
         private string PlayAudioFile()
