@@ -32,8 +32,7 @@ namespace AudioControl
                     string message = await streamReader.ReadLineAsync();
                     if (message != null)
                     {
-                        var command = commandProcessor.DeserializeCommand(message);
-                        var response = commandProcessor.ProcessCommand(command);
+                        var response = commandProcessor.ProcessCommand(message);
                         await streamWriter.WriteLineAsync(response);
                         await streamWriter.FlushAsync();
                     } else

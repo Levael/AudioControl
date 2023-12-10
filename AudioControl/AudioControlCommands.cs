@@ -1,32 +1,44 @@
-﻿namespace AudioControl {
+﻿namespace AudioControl
+{
 
-    public interface IAudioCommand
+    public class StartIntercomStreamCommand
     {
-        string Command { get; }
+        public string Command = "StartIntercomStream";
+        public string Microphone;
+        public string Speaker;
+
+        public StartIntercomStreamCommand(string microphone, string speaker)
+        {
+            Microphone = microphone;
+            Speaker = speaker;
+        }
     }
 
-    public class StartIntercomStreamCommand : IAudioCommand
+    public class StopIntercomStreamCommand
     {
-        public string Command => "StartIntercomStream";
-        public string Microphone { get; set; }
-        public string Speaker { get; set; }
+        public string Command = "StopIntercomStream";
     }
 
-    public class StopIntercomStreamCommand : IAudioCommand
+    public class PlayAudioFileCommand
     {
-        public string Command => "StopIntercomStream";
+        public string Command = "PlayAudioFile";
+        public string FileName;
+
+        public PlayAudioFileCommand(string fileName)
+        {
+            FileName = fileName;
+        }
     }
 
-    public class PlayAudioFileCommand : IAudioCommand
+    public class GetAudioDevicesCommand
     {
-        public string Command => "PlayAudioFile";
-        public string FileName { get; set; }
-    }
+        public string Command = "GetAudioDevices";
+        public bool DoUpdate;
 
-    public class GetAudioDevicesCommand : IAudioCommand
-    {
-        public string Command => "GetAudioDevices";
-        public bool DoUpdate { get; set; }
+        public GetAudioDevicesCommand(bool doUpdate)
+        {
+            DoUpdate = doUpdate;
+        }
     }
 
 }

@@ -1,5 +1,5 @@
 ﻿using NAudio.CoreAudioApi;
-using System.Text;
+using NAudio.Wave;
 using System.Text.Json;
 
 namespace AudioControl
@@ -7,70 +7,116 @@ namespace AudioControl
     public class AudioCommandProcessor
     {
         private MMDeviceEnumerator enumerator;
-        private string audioDevices;
+        private string audioDevicesJsonAnswer;
+        private MMDeviceCollection inputDevices;
+        private MMDeviceCollection outputDevices;
+        private bool isIntercomOn = false;
 
         public AudioCommandProcessor()
         {
             enumerator = new();
-            audioDevices = GetAudioDevices();
+
+            /*inputDevices = new();
+            outputDevices = new();*/
+
+            UpdateAudioDevices();
+            audioDevicesJsonAnswer = GetAudioDevices();
         }
 
-        public IAudioCommand DeserializeCommand(string jsonCommand)
-        {
-            var jsonDocument = JsonDocument.Parse(jsonCommand);
-            var root = jsonDocument.RootElement;
-            var commandType = root.GetProperty("command").GetString();
 
-            switch (commandType)
+        public string ProcessCommand(string jsonCommand)
+        {
+            // Command and Answers templates are in Unity "AudioControlCommands.cs"
+
+            var jsonDocument = JsonDocument.Parse(jsonCommand);
+            var jsonElement = jsonDocument.RootElement;
+            var commandName = jsonElement.GetProperty("Command").GetString();
+
+            switch (commandName)
             {
                 case "StartIntercomStream":
-                    return JsonSerializer.Deserialize<StartIntercomStreamCommand>(jsonCommand);
+                    return StartMic2SpeakerStreaming(jsonElement.GetProperty("MicrophoneIndex").GetInt32(), jsonElement.GetProperty("SpeakerIndex").GetInt32());
+
                 case "StopIntercomStream":
-                    return JsonSerializer.Deserialize<StopIntercomStreamCommand>(jsonCommand);
+                    return $"Intercom stream stopped";
+
                 case "PlayAudioFile":
-                    return JsonSerializer.Deserialize<PlayAudioFileCommand>(jsonCommand);
+                    return $"Played: {jsonElement.GetProperty("FileName").GetString()}";
+
                 case "GetAudioDevices":
-                    return new GetAudioDevicesCommand();
-                default:
-                    throw new InvalidOperationException("Unknown command type.");
-            }
-        }
-
-        public string ProcessCommand(IAudioCommand command)
-        {
-            switch (command)
-            {
-                case StartIntercomStreamCommand startCommand:
-                    return $"Intercom started with Microphone: {startCommand.Microphone} and Speaker: {startCommand.Speaker}";
-
-                case PlayAudioFileCommand playCommand:
-                    return $"Played: {playCommand.FileName}";
-
-                case GetAudioDevicesCommand getDevicesCommand:
-                    return $"Requested audio devices with parameter: {getDevicesCommand.DoUpdate}";
+                    if (jsonElement.GetProperty("DoUpdate").GetBoolean()) UpdateAudioDevices();
+                    return GetAudioDevices();
 
                 default:
                     return $"Unknown command";
             }
         }
 
-
+        private void UpdateAudioDevices()
+        {
+            inputDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active);
+            outputDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+        }
 
         private string GetAudioDevices()
         {
-            StringBuilder response = new StringBuilder();
-
-            foreach (var device in enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.Active))
+            var responseInfo = new
             {
-                response.AppendLine($"Device: {device.FriendlyName}");
-            }
+                Command = "GetAudioDevices",
+                InputDevices = inputDevices.Select(device => device.FriendlyName).ToList(),
+                OutputDevices = outputDevices.Select(device => device.FriendlyName).ToList()
+            };
 
-            return response.ToString();
+            string json = JsonSerializer.Serialize(responseInfo);
+            return json;
         }
 
-        private string StartMic2SpeakerStreaming()
+        private string StartMic2SpeakerStreaming(int inputDeviceIndex, int outputDeviceIndex)
         {
-            return "Streaming Started";
+            if (isIntercomOn) return JsonSerializer.Serialize(new { Command = "StartIntercomStream", IsOn = true });
+
+            var status = "";
+
+            try {
+                MMDevice inputDevice = inputDevices[inputDeviceIndex];
+                MMDevice outputDevice = outputDevices[outputDeviceIndex];
+
+                var audioInput = new WasapiCapture(inputDevice);
+                var audioOutput = new WasapiOut(outputDevice, AudioClientShareMode.Shared, false, 10);
+                // number here is size of buffer in ms (less -- faster, but more chance of artifacts)
+
+                var buffer = new BufferedWaveProvider(audioInput.WaveFormat);
+                audioOutput.Init(buffer);
+
+                audioInput.DataAvailable += (sender, e) =>
+                {
+                    buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                };
+
+                audioInput.StartRecording();
+                audioOutput.Play();
+
+                status = "Successful";
+                isIntercomOn = true;
+            } catch
+            {
+                status = "Unsuccessful";
+                isIntercomOn = false;
+            }
+
+
+            var responseInfo = new
+            {
+                Command = "StartIntercomStream",
+                Status = status,
+                InputDeviceIndex = inputDeviceIndex,
+                OutputDeviceIndex = outputDeviceIndex,
+                InputDeviceName = inputDevices[inputDeviceIndex].FriendlyName,
+                OutputDeviceName = outputDevices[outputDeviceIndex].FriendlyName
+            };
+
+            string json = JsonSerializer.Serialize(responseInfo);
+            return json;
         }
 
         private string StopMic2SpeakerStreaming()
