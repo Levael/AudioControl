@@ -37,18 +37,18 @@ namespace AudioControl
                         await streamWriter.FlushAsync();
                     } else
                     {
-                        Console.Beep(1000, 500); //Console.WriteLine($"NamedPipeServer / StartAsync / message == null");
+                        Console.Beep(1500, 500); //Console.WriteLine($"NamedPipeServer / StartAsync / message == null");
                         break;
                     }
                 }
                 catch (IOException ex)
                 {
-                    Console.Beep(1000, 500); //Console.WriteLine($"NamedPipeServer / StartAsync / IO exception: {ex.Message}");
+                    Console.Beep(1500, 500); //Console.WriteLine($"NamedPipeServer / StartAsync / IO exception: {ex.Message}");
                     break;
                 }
                 catch (OperationCanceledException)
                 {
-                    Console.Beep(1000, 500); //Console.WriteLine($"NamedPipeServer / StartAsync / Operation canceled");
+                    Console.Beep(1500, 500); //Console.WriteLine($"NamedPipeServer / StartAsync / Operation canceled");
                     break;
                 }
             }
@@ -61,9 +61,9 @@ namespace AudioControl
 
         public void Dispose()
         {
-            streamReader?.Dispose();
-            streamWriter?.Dispose();
-            pipeServer?.Dispose();
+            try { streamReader?.Dispose();  } catch { }
+            try { streamWriter?.Dispose();  } catch { }
+            try { pipeServer?.Dispose();    } catch { }
         }
     }
 }

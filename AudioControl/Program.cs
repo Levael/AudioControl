@@ -8,11 +8,11 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        if (args.Length < 1) { Console.Beep(500, 500); return; }                                    //Console.WriteLine("Parent process ID is required.");
+        if (args.Length < 1) { Console.Beep(1500, 500); return; }                                    //Console.WriteLine("Parent process ID is required.");
 
-        if (!int.TryParse(args[0], out int parentProcessId)) { Console.Beep(500, 500); return; }    //Console.WriteLine("Invalid parent process ID.");
+        if (!int.TryParse(args[0], out int parentProcessId)) { Console.Beep(1500, 500); return; }    //Console.WriteLine("Invalid parent process ID.");
 
-        StartParentProcessMonitorinf(parentProcessId);
+        StartParentProcessMonitoring(parentProcessId);
         //DebugFunc();
 
 
@@ -22,7 +22,7 @@ class Program
 
     
 
-    private static void StartParentProcessMonitorinf(int parentProcessId)
+    private static void StartParentProcessMonitoring(int parentProcessId)
     {
         var monitorThread = new Thread(() =>
         {

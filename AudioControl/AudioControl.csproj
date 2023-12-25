@@ -1,5 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Settings for project that compiles into single selfcontained .exe file which will be coppied to Unity project folder and executed from there -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
@@ -13,11 +14,18 @@
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
   </PropertyGroup>
 
+  <!-- Those files are from Unity project. They are common for those 2 programs so here are their links -->
+  <ItemGroup>
+    <Compile Include="C:\Users\Levael\GitHub\MOCU\Assets\Scripts\AudioControlCommands.cs" />
+    <!-- Here will be "config" file as well -->
+  </ItemGroup>
+
+  <!-- NAudio uses some stuff that are incompatible with "PublishSingleFile SelfContained" compilation. Therefore this setting solves the problem -->
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="System.Runtime.InteropServices.BuiltInComInterop.IsSupported" Value="true" />
   </ItemGroup>
 
-
+  <!-- Main lib and core of this project -->
   <ItemGroup>
     <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
