@@ -1,5 +1,10 @@
 ﻿using NAudio.CoreAudioApi;
+using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
+using System.Numerics;
 using System.Text.Json;
+
+// deserialize func todo (upd speed instead of using JSON)
 
 namespace AudioControl
 {
@@ -12,20 +17,30 @@ namespace AudioControl
         public IntercomStream incomingStream;
         public IntercomStream outgoingStream;
 
-        public int intercomStreamLatency = 10; // size of buffer in ms (less -- faster, but bigger chance of artifacts)
+        public int intercomStreamLatency = 10;  // size of buffer in ms (less -- faster, but bigger chance of artifacts)
         private JsonSerializerOptions jsonDeserializeOptions;
-        private string audioDevicesJsonAnswer;
+        //private string audioDevicesJsonAnswer;
+        private string pathToAudioFiles;
+        private Dictionary<string, (WasapiOut player, MMDevice device, MixingSampleProvider mixer, BufferedWaveProvider bufferForSingleAudioPlay)> audioOutputsDictionary;
+        private Dictionary<string, byte[]> audioFilesDictionary;
+        private WaveFormat unifiedWaveFormat;
 
         public AudioCommandProcessor()
         {
+            unifiedWaveFormat = new(rate: 44100, bits: 16, channels: 2);    // 2 channels = stereo
+            pathToAudioFiles = @"C:\Users\Levael\GitHub\MOCU\Assets\Audio"; // todo: move it to config file later
+
             enumerator = new();
 
             UpdateAudioDevices();
-            audioDevicesJsonAnswer = GetAudioDevices();
+            //audioDevicesJsonAnswer = GetAudioDevices();
             jsonDeserializeOptions = new JsonSerializerOptions { IncludeFields = true };
 
             incomingStream = new(direction: IntercomStreamDirection.Incoming, audioCommandProcessor: this);
             outgoingStream = new(direction: IntercomStreamDirection.Outgoing, audioCommandProcessor: this);
+
+            LoadAudioFiles();
+            InitOutputDevicesObjectsForSingleAudioPlay();
         }
 
 
@@ -44,7 +59,16 @@ namespace AudioControl
                     return ChangeOutputDeviceVolume(jsonCommand);
 
                 case "PlayAudioFile_Command":
-                    return PlayAudioFile(jsonCommand);
+                    try {
+                        Task.Run(() => PlayAudioFile(jsonCommand));
+                        //PlayAudioFile(jsonCommand);
+                        return JsonSerializer.Serialize(new { CommandName = "Bell" });
+                    } catch (Exception ex)
+                    {
+                        Console.WriteLine(ex);
+                        return JsonSerializer.Serialize(new { CommandName = "Error" });
+                    }
+                    
 
                 case "GetAudioDevices_Command":
                     return GetAudioDevices();
@@ -93,6 +117,58 @@ namespace AudioControl
 
                 default:
                     return JsonSerializer.Serialize(new { CommandName = "Unknown command"});
+            }
+        }
+
+        private void InitOutputDevicesObjectsForSingleAudioPlay()
+        {
+            audioOutputsDictionary = new();
+
+            foreach (var device in outputDevices)
+            {
+
+                audioOutputsDictionary.Add(
+                    device.FriendlyName,
+                    (
+                        player: new WasapiOut(device, AudioClientShareMode.Shared, false, 0),
+                        device: device,
+                        mixer:  new MixingSampleProvider(WaveFormat.CreateIeeeFloatWaveFormat(44100, 2)),
+                        bufferForSingleAudioPlay: new BufferedWaveProvider(unifiedWaveFormat)
+                    )
+                );
+
+                var currentItem = audioOutputsDictionary[device.FriendlyName];
+                currentItem.mixer.AddMixerInput(currentItem.bufferForSingleAudioPlay);
+
+                currentItem.player.Init(currentItem.mixer);
+                currentItem.player.Play();
+            }
+        }
+
+        private void LoadAudioFiles()
+        {
+            audioFilesDictionary = new() {
+                { "test.mp3", null },
+                { "test2.mp3", null },
+            };
+
+            foreach (var audioFile in audioFilesDictionary.Keys.ToList())
+            {
+                using var reader = new AudioFileReader(Path.Combine(pathToAudioFiles, audioFile));
+                var resampler = new WdlResamplingSampleProvider(reader, unifiedWaveFormat.SampleRate);
+                var sampleProvider = new SampleToWaveProvider16(resampler);
+                var memoryStream = new MemoryStream();
+                var waveFileWriter = new WaveFileWriter(memoryStream, sampleProvider.WaveFormat);
+
+                byte[] buffer = new byte[reader.WaveFormat.AverageBytesPerSecond * 4];
+                int bytesRead;
+
+                while ((bytesRead = sampleProvider.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    waveFileWriter.Write(buffer, 0, bytesRead);
+                }
+
+                audioFilesDictionary[audioFile] = memoryStream.ToArray();
             }
         }
 
@@ -163,9 +239,9 @@ namespace AudioControl
 
             for (int i = 0; i < devices.Count; i++)
             {
-                //Console.WriteLine($"deviceName: {deviceName}, DeviceFriendlyName: {devices[i].DeviceFriendlyName}");
+                //Console.WriteLine($"deviceName: {deviceName}, FriendlyName: {devices[i].FriendlyName}");
 
-                if (devices[i].DeviceFriendlyName == deviceName)
+                if (devices[i].FriendlyName == deviceName)
                 {
                     index = i;
                     break;
@@ -179,25 +255,60 @@ namespace AudioControl
         {
             return JsonSerializer.Serialize(new {
                 Command = "GetAudioDevices_Command",
-                InputDevices = inputDevices.Select(device => device.DeviceFriendlyName).ToList(),
-                OutputDevices = outputDevices.Select(device => device.DeviceFriendlyName).ToList()
+                InputDevices = inputDevices.Select(device => device.FriendlyName).ToList(),
+                OutputDevices = outputDevices.Select(device => device.FriendlyName).ToList()
             });
         }
 
-        private string PlayAudioFile(string jsonCommand)
+        private async void PlayAudioFile(string jsonCommand)
         {
-            try
-            {
-                var obj = JsonSerializer.Deserialize<PlayAudioFile_Command>(jsonCommand, jsonDeserializeOptions);
-                // stamp
-                Console.Beep(500, 200);
+            var commandData = JsonSerializer.Deserialize<PlayAudioFile_Command>(jsonCommand, jsonDeserializeOptions);
 
-                return JsonSerializer.Serialize(new { CommandName = "PlayAudioFile_Command", HasError = false });
-            }
-            catch (Exception ex)
+            var audioData = audioFilesDictionary[commandData.AudioFileName];                                    // unified audio (array of bytes of audio data)
+            var buffer = audioOutputsDictionary[commandData.AudioOutputDeviceName].bufferForSingleAudioPlay;    // sub-buffer of mixer that's responsible for single audios
+
+            buffer.ClearBuffer();
+            buffer.AddSamples(audioData, 0, audioData.Length);
+        }
+
+        private async void PlayAudioFile_Legacy_2(string jsonCommand)
+        {
+            var commandData = JsonSerializer.Deserialize<PlayAudioFile_Command>(jsonCommand, jsonDeserializeOptions);
+            var player = new WasapiOut(GetDeviceByItsName(commandData.AudioOutputDeviceName, outputDevices), AudioClientShareMode.Shared, false, 0);
+            //var player = outputDevicesObjectsForSingleAudioPlay[commandData.AudioOutputDeviceName];
+            //var audio = audioFiles[commandData.AudioFileName];
+            var audio = new AudioFileReader(Path.Combine(pathToAudioFiles, "test.mp3"));
+            audio.Position = 0;
+
+            /*player.Stop();
+            while (player.PlaybackState != PlaybackState.Stopped) await Task.Delay(1);
+            audio.Position = 0;*/
+
+            player.Init(audio);
+            player.Play();
+
+            while (player.PlaybackState == PlaybackState.Playing) await Task.Delay(50);
+        }
+
+        private async void PlayAudioFile_Legacy_1(string jsonCommand)
+        {
+            var obj = JsonSerializer.Deserialize<PlayAudioFile_Command>(jsonCommand, jsonDeserializeOptions);
+            var fullAudioFilePath = Path.Combine(pathToAudioFiles, obj.AudioFileName);
+
+            Console.WriteLine(
+                $"PlayAudioFile: AudioFileName = {obj.AudioFileName}, " +
+                $"AudioOutputDeviceName = {obj.AudioOutputDeviceName}, " +
+                $"FullAudioFilePath = {fullAudioFilePath}"
+            );
+
+            using (var audioFileReader = new AudioFileReader(fullAudioFilePath))
+            using (var audioOutputDevice = GetDeviceByItsName(obj.AudioOutputDeviceName, outputDevices))
+            using (var wasapiOut = new WasapiOut(audioOutputDevice, AudioClientShareMode.Shared, false, 0))
             {
-                Console.WriteLine(ex);
-                return JsonSerializer.Serialize(new { CommandName = "PlayAudioFile_Command", HasError = true });
+                wasapiOut.Init(audioFileReader);
+                wasapiOut.Play();
+
+                while (wasapiOut.PlaybackState == PlaybackState.Playing) await Task.Delay(50);
             }
         }
     }

@@ -31,7 +31,7 @@ namespace AudioControl
 
             if (string.IsNullOrEmpty(audioInputDeviceName) || string.IsNullOrEmpty(audioOutputDeviceName))
             {
-                Console.WriteLine($"IntercomStream constructor. inp: {string.IsNullOrEmpty(audioInputDeviceName)}, out: {string.IsNullOrEmpty(audioOutputDeviceName)}");
+                //Console.WriteLine($"IntercomStream constructor. inp: {string.IsNullOrEmpty(audioInputDeviceName)}, out: {string.IsNullOrEmpty(audioOutputDeviceName)}");
                 isStreamReady = false;
                 return;
             }
@@ -49,8 +49,8 @@ namespace AudioControl
             _audioOutputObject.Play();
             isStreamOn = true;
 
-            Console.WriteLine($"Start: {isStreamOn}, {isStreamReady}");
-            Console.WriteLine($"_audioInputDeviceName: {_audioInputDeviceName}, _audioOutputDeviceName: {_audioOutputDeviceName}, _audioOutputDeviceVolume: {_audioOutputDeviceVolume}");
+            //Console.WriteLine($"Start: {isStreamOn}, {isStreamReady}");
+            //Console.WriteLine($"_audioInputDeviceName: {_audioInputDeviceName}, _audioOutputDeviceName: {_audioOutputDeviceName}, _audioOutputDeviceVolume: {_audioOutputDeviceVolume}");
         }
 
         public void StopStream()
