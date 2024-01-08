@@ -9,7 +9,6 @@ namespace AudioControl
         private bool isStreamOn = false;
         private bool isStreamReady = false;
 
-        // temp
         public string  _audioInputDeviceName;
         public string  _audioOutputDeviceName;
         public float   _audioOutputDeviceVolume;
@@ -17,10 +16,10 @@ namespace AudioControl
         private WasapiCapture _audioInputObject;
         private WasapiOut _audioOutputObject;        
 
-        private MMDevice _audioInputDevice;
-        private MMDevice _audioOutputDevice;
+        /*private MMDevice _audioInputDevice;
+        private MMDevice _audioOutputDevice;*/
 
-        private BufferedWaveProvider _streamDataBuffer;
+        /*private BufferedWaveProvider _streamDataBuffer;*/
 
         private AudioCommandProcessor _audioCommandProcessor;
 
@@ -46,11 +45,8 @@ namespace AudioControl
             if (!isStreamReady || isStreamOn) return;
 
             _audioInputObject.StartRecording();
-            _audioOutputObject.Play();
+            //_audioOutputObject.Play();
             isStreamOn = true;
-
-            //Console.WriteLine($"Start: {isStreamOn}, {isStreamReady}");
-            //Console.WriteLine($"_audioInputDeviceName: {_audioInputDeviceName}, _audioOutputDeviceName: {_audioOutputDeviceName}, _audioOutputDeviceVolume: {_audioOutputDeviceVolume}");
         }
 
         public void StopStream()
@@ -58,7 +54,7 @@ namespace AudioControl
             if (!isStreamOn) return;
 
             _audioInputObject.StopRecording();
-            _audioOutputObject.Stop();
+            //_audioOutputObject.Stop();
             isStreamOn = false;
         }
 
@@ -72,31 +68,37 @@ namespace AudioControl
 
             if (string.IsNullOrEmpty(_audioInputDeviceName)) throw new InvalidOperationException("Device name can't be Null or Empty");
             if (isStreamOn) StopStream();
-            
-            _audioInputDevice = _audioCommandProcessor.GetDeviceByItsName(_audioInputDeviceName, _audioCommandProcessor.inputDevices);
+
+            _audioInputObject = _audioCommandProcessor.audioInputsDictionary[_audioInputDeviceName].receiver;
+
+            /*_audioInputDevice = _audioCommandProcessor.GetDeviceByItsName(_audioInputDeviceName, _audioCommandProcessor.inputDevices);
             _audioInputObject?.Dispose();   // Disposing old object if there is one
-            _audioInputObject = new WasapiCapture(_audioInputDevice);
+            _audioInputObject = new WasapiCapture(_audioInputDevice);*/
         }
 
         /// <summary>
         /// Sets or reloads the output device based on the provided device name
         /// </summary>
-        private void SetOutputDevice(string audioOutputDeviceName)
+        private void SetOutputDevice(string audioOutputDeviceName, float audioOutputDeviceVolume)
         {
             // if function didn't get any parameter -- just same the object (looks like this because of error CS1736)
             _audioOutputDeviceName = audioOutputDeviceName == "same" ? _audioOutputDeviceName : audioOutputDeviceName;
+            _audioOutputDeviceVolume = audioOutputDeviceVolume == -1f ? _audioOutputDeviceVolume : audioOutputDeviceVolume;
 
             if (string.IsNullOrEmpty(audioOutputDeviceName)) throw new InvalidOperationException("Device name can't be Null or Empty");
             if (isStreamOn) StopStream();
 
-            _audioOutputDeviceName = audioOutputDeviceName;
+            _audioOutputObject = _audioCommandProcessor.audioOutputsDictionary[_audioOutputDeviceName].player;
+            _audioCommandProcessor.audioOutputsDictionary[_audioOutputDeviceName].device.AudioEndpointVolume.MasterVolumeLevelScalar = _audioOutputDeviceVolume / 100.0f;
+
+            /*_audioOutputDeviceName = audioOutputDeviceName;
             _audioOutputDevice = _audioCommandProcessor.GetDeviceByItsName(audioOutputDeviceName, _audioCommandProcessor.outputDevices);
             _audioOutputDevice.AudioEndpointVolume.MasterVolumeLevelScalar = _audioOutputDeviceVolume / 100.0f;
             _audioOutputObject?.Dispose();   // Disposing old object if there is one
-            _audioOutputObject = new WasapiOut(_audioOutputDevice, AudioClientShareMode.Shared, false, _audioCommandProcessor.intercomStreamLatency);
+            _audioOutputObject = new WasapiOut(_audioOutputDevice, AudioClientShareMode.Shared, false, _audioCommandProcessor.intercomStreamLatency);*/
         }
 
-        private void SetBuffer()
+        /*private void SetBuffer()
         {
             if (isStreamOn) StopStream();
 
@@ -107,7 +109,7 @@ namespace AudioControl
             {
                 _streamDataBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
             };
-        }
+        }*/
 
         /// <summary>
         /// When passing a value to a function, it is necessary to indicate the specific type of device
@@ -117,19 +119,59 @@ namespace AudioControl
             if (audioOutputDeviceVolume != -1f) _audioOutputDeviceVolume = audioOutputDeviceVolume; // must be before "SetOutputDevice"
 
             SetInputDevice(audioInputDeviceName);
-            SetOutputDevice(audioOutputDeviceName);
-            SetBuffer();
+            SetOutputDevice(audioOutputDeviceName, audioOutputDeviceVolume);
+            BindInputToOutput(audioInputDeviceName, audioOutputDeviceName);
 
             isStreamReady = true;
-
-            //Console.WriteLine($"Update: {isStreamOn}, {isStreamReady}");
         }
 
-        public void UpdateAudioOutputDevicesVolume(float audioOutputDeviceVolume)
+        public void UpdateAudioDevices_test(string audioInputDeviceName, string audioOutputDeviceName, float audioOutputDeviceVolume)
+        {
+            if (string.IsNullOrEmpty(audioInputDeviceName) || string.IsNullOrEmpty(audioOutputDeviceName))
+                throw new InvalidOperationException("Device name can't be Null or Empty");
+            if (isStreamOn)
+                StopStream();
+
+            _audioOutputDeviceVolume    = audioOutputDeviceVolume   == -1f      ? _audioOutputDeviceVolume  : audioOutputDeviceVolume;
+            _audioInputDeviceName       = audioInputDeviceName      == "same"   ? _audioInputDeviceName     : audioInputDeviceName;
+            _audioOutputDeviceName      = audioOutputDeviceName     == "same"   ? _audioOutputDeviceName    : audioOutputDeviceName;
+
+            BindInputToOutput(inputDeviceName: _audioInputDeviceName, outputDeviceName: _audioOutputDeviceName);    // temp (so dirty)
+
+            isStreamReady = true;
+        }
+
+        /*public void UpdateAudioOutputDevicesVolume(float audioOutputDeviceVolume)
         {
             if (audioOutputDeviceVolume != -1f) _audioOutputDeviceVolume = audioOutputDeviceVolume;
 
             _audioOutputDevice.AudioEndpointVolume.MasterVolumeLevelScalar = _audioOutputDeviceVolume / 100.0f;
+        }*/
+
+
+
+
+
+        private void BindInputToOutput(string inputDeviceName, string outputDeviceName)
+        {
+            // The data in the tuple cannot be changed one at a time,
+            // you need to copy the entire tuple, change something and overwrite the entire tuple 
+
+            var inputDeviceTuple = _audioCommandProcessor.audioInputsDictionary[inputDeviceName];
+            var outputDeviceTuple = _audioCommandProcessor.audioOutputsDictionary[outputDeviceName];
+
+            inputDeviceTuple.buffer = outputDeviceTuple.bufferForIntercom;
+            _audioCommandProcessor.audioInputsDictionary[inputDeviceName] = inputDeviceTuple;
+
+
+            // Due to the fact that these are now new elements, you need to overwrite the event handler and specify the data format
+
+            
+
+            inputDeviceTuple.receiver.DataAvailable += (sender, e) =>
+            {
+                inputDeviceTuple.buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+            };
         }
     }
 

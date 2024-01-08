@@ -21,10 +21,11 @@ namespace AudioControl
         private JsonSerializerOptions jsonDeserializeOptions;
         //private string audioDevicesJsonAnswer;
         private string pathToAudioFiles;
-        private Dictionary<string, (WasapiOut player, MMDevice device, MixingSampleProvider mixer, BufferedWaveProvider bufferForSingleAudioPlay, BufferedWaveProvider bufferForIntercom)> audioOutputsDictionary;
+        public Dictionary<string, (WasapiOut player, MMDevice device, MixingSampleProvider mixer, BufferedWaveProvider bufferForSingleAudioPlay, BufferedWaveProvider bufferForIntercom)> audioOutputsDictionary;
+        public Dictionary<string, (WasapiCapture receiver, MMDevice device, BufferedWaveProvider ?buffer)> audioInputsDictionary;
         private Dictionary<string, byte[]> preLoadedAudioFiles;
         private List<string> audioFileNames;
-        private WaveFormat unifiedWaveFormat;
+        public WaveFormat unifiedWaveFormat;
 
         public AudioCommandProcessor()
         {
@@ -33,7 +34,6 @@ namespace AudioControl
             audioFileNames = new() { "test.mp3", "test2.mp3" };                 // todo: maybe read it from config or unity, idk
 
             enumerator = new();
-            audioOutputsDictionary = new();
 
             UpdateAudioDevices();
             //audioDevicesJsonAnswer = GetAudioDevices();
@@ -43,7 +43,8 @@ namespace AudioControl
             outgoingStream = new(direction: IntercomStreamDirection.Outgoing, audioCommandProcessor: this);
 
             LoadAudioFiles();
-            InitOutputDevicesObjectsForSingleAudioPlay();
+            InitOutputDevicesDictionary();
+            InitInputDevicesDictionary();
         }
 
 
@@ -123,11 +124,12 @@ namespace AudioControl
             }
         }
 
-        private async void InitOutputDevicesObjectsForSingleAudioPlay()
+        private void InitOutputDevicesDictionary()
         {
+            audioOutputsDictionary = new();
+
             foreach (var device in outputDevices)
             {
-
                 audioOutputsDictionary.Add(
                     device.FriendlyName,
                     (
@@ -141,9 +143,30 @@ namespace AudioControl
 
                 var currentItem = audioOutputsDictionary[device.FriendlyName];
                 currentItem.mixer.AddMixerInput(currentItem.bufferForSingleAudioPlay);
+                currentItem.mixer.AddMixerInput(currentItem.bufferForIntercom);
 
                 currentItem.player.Init(currentItem.mixer);
                 currentItem.player.Play();
+            }
+        }
+
+        private void InitInputDevicesDictionary()
+        {
+            audioInputsDictionary = new();
+
+            foreach (var device in inputDevices)
+            {
+                audioInputsDictionary.Add(
+                    device.FriendlyName,
+                    (
+                        receiver: new WasapiCapture(device),
+                        device: device,
+                        buffer: null    // link to "bufferForIntercom" in "audioOutputsDictionary" object
+                    )
+                );
+
+                var currentItem = audioInputsDictionary[device.FriendlyName];
+                currentItem.receiver.WaveFormat = unifiedWaveFormat;
             }
         }
 
@@ -224,8 +247,8 @@ namespace AudioControl
             {
                 var obj = JsonSerializer.Deserialize<ChangeOutputDeviceVolume_Command>(jsonCommand, jsonDeserializeOptions);
 
-                outgoingStream.UpdateAudioOutputDevicesVolume(audioOutputDeviceVolume: obj.AudioOutputDeviceVolumeParticipant);
-                incomingStream.UpdateAudioOutputDevicesVolume(audioOutputDeviceVolume: obj.AudioOutputDeviceVolumeResearcher);
+                /*outgoingStream.UpdateAudioOutputDevicesVolume(audioOutputDeviceVolume: obj.AudioOutputDeviceVolumeParticipant);
+                incomingStream.UpdateAudioOutputDevicesVolume(audioOutputDeviceVolume: obj.AudioOutputDeviceVolumeResearcher);*/
 
                 return JsonSerializer.Serialize(new { CommandName = "ChangeOutputDeviceVolume_Command", HasError = false });
             }
